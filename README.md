@@ -1,7 +1,9 @@
 # Redrob Intelligent Candidate Ranking System
 
-**Track 01 — The Data & AI Challenge**
-Ranking 100,000 candidates against a Senior AI Engineer JD using multi-signal intelligent scoring.
+**Team: LeConHinton**
+**Hackathon: Redrob AI — Track 01: Intelligent Candidate Discovery**
+**GitHub:** https://github.com/neevmodh/redrob-candidate-ranker
+**Live Demo:** https://redrobai-candidate-ranker.streamlit.app/
 
 ---
 
@@ -9,21 +11,38 @@ Ranking 100,000 candidates against a Senior AI Engineer JD using multi-signal in
 
 ```bash
 pip install -r requirements.txt
-python rank.py --candidates ./candidates.jsonl --out ./submission.csv
-python validate_submission.py submission.csv
+python rank.py --candidates ./candidates.jsonl --out ./leconhinton.csv
+python validate_submission.py leconhinton.csv
 ```
 
-**Runtime:** ~25 seconds on CPU (MacBook M-series). Well within the 5-minute budget.
-**Memory:** ~1.2 GB peak. Well within the 16 GB limit.
+**Runtime:** ~25 seconds on CPU. Well within the 5-minute budget.
+**Memory:** ~1.2 GB peak. Well within 16 GB limit.
 **Network:** Zero — fully offline, no API calls.
 
 ---
 
 ## Problem Statement
 
-Given 100,000 candidate profiles with structured attributes, career history, skills, and behavioral signals from the Redrob platform, rank the top 100 candidates for a **Senior AI Engineer (Founding Team)** role at Redrob AI.
+Given 100,000 candidate profiles with structured attributes, career history, skills,
+and behavioral signals from the Redrob platform, rank the top 100 candidates for a
+**Senior AI Engineer (Founding Team)** role at Redrob AI (Series A, Pune/Noida).
 
-The core challenge: go beyond keyword matching. The JD explicitly warns that candidates whose skills section contains AI keywords but whose career is irrelevant (e.g., "Marketing Manager" with "FAISS" listed) should rank low. The right signals are career trajectory, production deployment evidence, and behavioral availability — not just keyword overlap.
+The core challenge: go beyond keyword matching. The JD explicitly warns that candidates
+whose skills section contains AI keywords but whose career is irrelevant (e.g., "Marketing
+Manager" with "FAISS" listed) should rank low. The right signals are career trajectory,
+production deployment evidence, and behavioral availability — not keyword overlap.
+
+---
+
+## Live Demo (Sandbox)
+
+**URL:** https://redrobai-candidate-ranker.streamlit.app/
+
+Upload `sample_candidates.json` (included in this repo) to test the ranker live:
+- Drag and drop the file into the uploader
+- Click **Run Ranker**
+- View ranked results with per-candidate score breakdowns
+- Download the submission-ready CSV
 
 ---
 
@@ -44,7 +63,7 @@ candidates.jsonl (100K)
            │
            ▼
 ┌─────────────────────┐
-│  Stage 3: Honeypots │  Flag impossible profiles (13 detected in dataset)
+│  Stage 3: Honeypots │  Flag impossible profiles (72 detected in dataset)
 └──────────┬──────────┘
            │
            ▼
@@ -66,12 +85,12 @@ candidates.jsonl (100K)
                     │
                     ▼
         ┌───────────────────┐
-        │  Stage 5: Sort,   │  Top-100, ranks 1-100, tie-break by cand_id asc
-        │  rank, reason     │  Generate per-candidate reasoning strings
+        │  Stage 5: Sort,   │  Top-100, ranks 1-100
+        │  rank, reason     │  Unique per-candidate reasoning strings
         └───────────────────┘
                     │
                     ▼
-             submission.csv
+             leconhinton.csv
 ```
 
 ---
@@ -83,67 +102,84 @@ candidates.jsonl (100K)
 Scores candidate skills against 8 JD must-have skill groups and 5 nice-to-have groups.
 
 **Anti-keyword-stuffing trust multiplier:**
-Each skill is scored on three dimensions before matching:
-- Endorsements (40%) — `min(endorsements, 50) / 50`
-- Duration used (40%) — `min(duration_months, 48) / 48`
-- Proficiency level (20%) — beginner=0.25, intermediate=0.5, advanced=0.75, expert=1.0
 
-Key penalty: `proficiency=expert` + `duration_months=0` → trust score drops to 0.05.
+Each skill is scored on three dimensions before matching:
+- **Endorsements (40%)** — `min(endorsements, 50) / 50`
+- **Duration used (40%)** — `min(duration_months, 48) / 48`
+- **Proficiency (20%)** — beginner=0.25, intermediate=0.5, advanced=0.75, expert=1.0
+
+Key penalty: `proficiency=expert` + `duration_months=0` → trust score drops to **0.05**.
 This directly counters keyword stuffers who list "expert" skills they never used.
 
-Verified assessment scores (from Redrob platform) add a bonus of up to +0.25 to that skill's trust score.
+Platform-verified `skill_assessment_scores` add up to +0.25 bonus to that skill's trust.
 
-**JD must-have skill groups:** `embeddings`, `vector_db`, `ranking`, `eval_framework`, `python`, `nlp`, `ml_core`, `search`
+**JD must-have skill groups matched:**
+`embeddings`, `vector_db`, `ranking`, `eval_framework`, `python`, `nlp`, `ml_core`, `search`
 
-**JD nice-to-have groups:** `llm_finetuning`, `learning_to_rank`, `recsys`, `mlops`, `data_eng`
+**JD nice-to-have groups:**
+`llm_finetuning`, `learning_to_rank`, `recsys`, `mlops`, `data_eng`
+
+---
 
 ### Component 2 — Career Trajectory Score (30%)
 
 The most important signal for detecting keyword stuffers and mismatched candidates.
 
 **Title scoring (40% of career score):**
-- Current title matched against 16 ideal titles: 1.0 (exact) → 0.85 (keyword match) → 0.60 (partial) → 0.05 (bad title: Marketing Manager, HR Manager, etc.)
-- Weighted by recency: current title 60%, most recent past 40%
+- Matched against 16 ideal titles: exact=1.0, keyword match=0.85, partial=0.60
+- Bad titles (Marketing Manager, HR Manager, Accountant, etc.) = 0.05
+- Weighted by recency: current title 60%, past titles 40%
 
 **Services company penalty:**
-The JD explicitly disqualifies candidates whose entire career is at body-shop companies (TCS, Infosys, Wipro, Accenture, Cognizant, Capgemini, HCL, etc.). The penalty is applied as a multiplier on career score:
-- >90% career at services companies → 0.25× multiplier
-- 70-90% → 0.45×
-- 50-70% → 0.70×
-- <25% → no penalty (1.0×)
+The JD explicitly disqualifies candidates whose entire career is at body-shop companies
+(TCS, Infosys, Wipro, Accenture, Cognizant, Capgemini, HCL, etc.):
+
+| Services career fraction | Multiplier |
+|--------------------------|------------|
+| > 90% | 0.25× |
+| 70–90% | 0.45× |
+| 50–70% | 0.70× |
+| < 25% | 1.00× (no penalty) |
 
 **Career description matching (40% of career score):**
-Each role description is searched for 35 JD-relevant keywords (embedding, retrieval, ranking, faiss, pinecone, recommendation, etc.), weighted by recency. A "Marketing Manager" who never mentions these terms scores near zero even with AI skills listed.
+Each role description is searched for 35 JD-relevant keywords (embedding, retrieval,
+ranking, faiss, pinecone, recommendation, etc.), weighted by recency. A "Marketing Manager"
+who never mentions these terms scores near zero even with AI skills listed.
 
 **Production evidence bonus:**
-Descriptions containing "production", "deployed", "A/B test", "serving", "at scale", "million users", etc. receive a +0.15 bonus, rewarding the "shipper" mindset the JD explicitly asks for.
+Descriptions containing "production", "deployed", "A/B test", "serving", "at scale",
+"million users" receive a +0.15 bonus — rewarding the "shipper" mindset the JD asks for.
+
+---
 
 ### Component 3 — Experience Score (20%)
 
-- **Years of experience fit:** JD targets 5–9 years. Ideal range 6–8 scores 1.0. Outside band penalised smoothly.
-- **Applied ML fraction:** Counts months spent in ML/AI/Search/NLP roles vs total career months. A high fraction boosts the score.
+- **Years of experience fit:** JD targets 5–9 years. Ideal 6–8 scores 1.0. Outside band penalised smoothly.
+- **Applied ML fraction:** Counts months in ML/AI/Search/NLP roles vs total career. High fraction boosts score.
 - **Education:** Degree tier (tier_1=1.0 → tier_4=0.45) + relevant field bonus (+0.10 for CS/ML/AI/Statistics).
 
-### Behavioral Signal Multiplier (applied post-scoring)
+---
+
+### Behavioral Signal Multiplier
 
 The 23 Redrob platform signals are converted to an availability multiplier in **[0.50, 1.20]**:
 
 | Signal | Weight | Notes |
 |--------|--------|-------|
 | `open_to_work_flag` | High | +0.20 bonus if true |
-| `last_active_date` | High | <7d=1.0, <30d=0.95, <90d=0.75, >180d=0.15 |
-| `recruiter_response_rate` | Medium | Direct 0-1 pass-through |
+| `last_active_date` | High | <7d=1.0, <30d=0.95, >180d=0.15 |
+| `recruiter_response_rate` | Medium | Direct 0–1 pass-through |
 | `avg_response_time_hours` | Medium | <24h=1.0, >168h=0.30 |
 | `interview_completion_rate` | Medium | Direct pass-through |
 | `notice_period_days` | Medium | ≤30d=1.0, >90d=0.55, >120d=0.40 |
 | `github_activity_score` | Low | -1 (no GitHub)=0.30, 80+=1.0 |
 | `offer_acceptance_rate` | Low | -1 (no history)=neutral |
-| `profile_completeness_score` | Low | Normalised 0-1 |
+| `profile_completeness_score` | Low | Normalised 0–1 |
 | Verified email/phone/LinkedIn | Low | +0.05 each |
 
 **Final formula:**
 ```
-base_score = 0.35×skill + 0.30×career + 0.20×experience
+base_score  = 0.35 × skill_score + 0.30 × career_score + 0.20 × experience_score
 final_score = base_score × behavioral_multiplier   (clamped to [0, 1])
 ```
 
@@ -151,34 +187,51 @@ final_score = base_score × behavioral_multiplier   (clamped to [0, 1])
 
 ## Honeypot Detection
 
-The dataset contains ~80 honeypots with subtly impossible profiles. Our detector flags candidates with 2+ of these signals:
+The dataset contains ~80 honeypots with subtly impossible profiles. Our detector uses a
+**strong/weak signal** framework:
 
-1. **Expert skill with 0 months used** — 2+ skills with `proficiency=expert` and `duration_months=0`
-2. **Too many expert skills** — 10+ skills at expert proficiency (unrealistic)
-3. **Impossible tenure** — worked at a company longer than the company has existed (checked against known young companies: Sarvam AI est. 2023, Krutrim est. 2023, etc.)
-4. **Inflated total tenure** — sum of `duration_months` > 250% of `years_of_experience × 12`
-5. **Advanced skills never used** — 4+ skills at advanced/expert with 0 months
+**Strong signals (1 alone = honeypot):**
+- Impossible tenure at young companies — Sarvam AI (est. April 2023, max 38 months plausible), Krutrim (est. Dec 2023, max 30 months plausible)
+- 3+ expert skills with `duration_months = 0`
+- 12+ expert skills total
+- 5+ advanced/expert skills with `duration_months = 0`
 
-**Result:** 72 honeypots identified and forced to bottom ranks (score ~0.005). Zero appear in the top 100 (well below the 10% disqualification threshold).
+**Weak signals (2 needed = honeypot):**
+- 1–2 expert skills with `duration_months = 0`
+- 10–11 expert skills total
+- 3–4 advanced/expert skills with `duration_months = 0`
+- Inflated tenure: total career months > 250% of `years_of_experience × 12`
+
+**Result: 72 honeypots identified, 0 in top-100 (well below 10% disqualification threshold).**
 
 ---
 
 ## Design Decisions
 
 **Why not pure keyword/embedding similarity?**
-The JD explicitly calls this out as the trap: "find candidates whose skills section contains the most AI keywords — that's a trap we've built into the dataset." A "Marketing Manager" with "FAISS" and "Pinecone" listed as beginner skills should rank far below a genuine Search Engineer. The trust multiplier (endorsements × duration × proficiency) handles this.
+The JD explicitly calls this out as the trap: "find candidates whose skills section contains
+the most AI keywords — that's a trap we've built into the dataset." A "Marketing Manager"
+with "FAISS" and "Pinecone" listed as beginner skills should rank far below a genuine Search
+Engineer. The trust multiplier (endorsements × duration × proficiency) handles this.
 
 **Why the services-company penalty?**
-The JD says: "People who have only worked at consulting firms (TCS, Infosys, Wipro, Accenture, Cognizant, Capgemini) in their entire career — we've had bad fit experiences." This is a hard signal that must be encoded, not a subtle hint.
+The JD says: "People who have only worked at consulting firms (TCS, Infosys, Wipro, Accenture,
+Cognizant, Capgemini) in their entire career — we've had bad fit experiences." This is a hard
+signal that must be encoded.
 
 **Why behavioral as a multiplier rather than additive?**
-A perfect-on-paper candidate who hasn't logged in for 9 months and has a 5% response rate is literally not hireable. Multiplying rather than adding ensures that extreme unavailability kills the final score even for high-quality profiles — which matches real recruiter logic.
+A perfect-on-paper candidate who hasn't logged in for 9 months and has a 5% response rate is
+literally not hireable. Multiplying rather than adding ensures extreme unavailability kills the
+final score even for high-quality profiles.
 
-**Why NDCG@10 gets the most tuning attention?**
-It carries 50% of the evaluation weight. Getting the top-10 right matters more than everything else combined. The skill trust score and career trajectory score are both calibrated to be harsh discriminators at the top, not gentle sorters.
+**Why NDCG@10 tuning?**
+It carries 50% of the evaluation weight. Getting the top-10 right matters more than everything
+else combined. The skill trust score and career trajectory score are calibrated to be harsh
+discriminators at the top.
 
-**No external models, no API calls**
-All scoring is deterministic feature engineering. No sentence-transformers, no embeddings model to download, no FAISS index to build. The entire pipeline runs in ~25 seconds on a laptop CPU.
+**No external models, no API calls:**
+All scoring is deterministic feature engineering. No model downloads, no FAISS index, no
+sentence-transformers. Entire pipeline runs in ~25 seconds on a laptop CPU.
 
 ---
 
@@ -187,19 +240,19 @@ All scoring is deterministic feature engineering. No sentence-transformers, no e
 ```
 .
 ├── rank.py                        # Main entrypoint — CLI, pipeline orchestration
-├── requirements.txt               # Pinned dependencies (numpy, python-dateutil)
-├── validate_submission.py         # Official format validator (provided by challenge)
-├── submission.csv                 # Generated submission (top-100 ranked candidates)
+├── app.py                         # Streamlit sandbox demo
+├── requirements.txt               # Pinned dependencies
+├── validate_submission.py         # Official format validator (challenge-provided)
+├── leconhinton.csv                # Submission file (top-100 ranked candidates)
 ├── submission_metadata.yaml       # Team metadata for portal submission
-├── candidates.jsonl               # Full 100K candidate pool (challenge provided)
-├── sample_candidates.json         # 50-candidate sample for quick testing
-├── candidate_schema.json          # JSON schema for candidate profiles
+├── candidate_schema.json          # JSON schema for candidate profiles (challenge-provided)
+├── sample_candidates.json         # 50-candidate sample for testing
 └── scorer/
     ├── __init__.py
-    ├── jd_parser.py               # JD → structured JobDescription + skill taxonomy
-    ├── honeypot.py                # Impossible profile detection
+    ├── jd_parser.py               # JD → structured JobDescription + 60-entry skill alias map
+    ├── honeypot.py                # Impossible profile detection (strong/weak signal framework)
     ├── features.py                # Skill score + career trajectory + experience score
-    ├── signals.py                 # Behavioral signal → availability multiplier
+    ├── signals.py                 # 23 Redrob signals → availability multiplier [0.50, 1.20]
     ├── ranker.py                  # Score assembly, sorting, rank assignment
     └── reasoning.py               # Per-candidate reasoning string generation
 ```
@@ -213,10 +266,10 @@ All scoring is deterministic feature engineering. No sentence-transformers, no e
 pip install -r requirements.txt
 
 # 2. Run the ranker
-python rank.py --candidates ./candidates.jsonl --out ./submission.csv
+python rank.py --candidates ./candidates.jsonl --out ./leconhinton.csv
 
 # 3. Validate output format
-python validate_submission.py submission.csv
+python validate_submission.py leconhinton.csv
 # Expected: "Submission is valid."
 ```
 
@@ -232,7 +285,7 @@ python validate_submission.py submission.csv
   => Top 100 candidates ranked in ~19s
 [5/5] Generating reasoning strings...
   => Reasoning generated in ~0.0s
-[OK] Submission written to: submission.csv  (100 rows)
+[OK] Submission written to: leconhinton.csv  (100 rows)
 [DONE] Total wall-clock time: ~25s (OK)
 ```
 
@@ -253,7 +306,8 @@ python validate_submission.py submission.csv
 | 9 | CAND_0077337 | 0.7202 | Staff Machine Learning Engineer | Paytm |
 | 10 | CAND_0055905 | 0.7200 | Senior Machine Learning Engineer | Flipkart |
 
-All top-10 candidates are ML/AI engineers at product companies with direct experience in search, retrieval, ranking, or recommendation systems.
+All top-10 are ML/AI engineers at product companies with direct experience in
+search, retrieval, ranking, or recommendation systems.
 
 ---
 
@@ -261,9 +315,7 @@ All top-10 candidates are ML/AI engineers at product companies with direct exper
 
 - **Platform:** MacBook Pro (Apple Silicon M-series), macOS
 - **Python:** 3.14.3
-- **CPU cores:** 8
-- **RAM:** 16 GB
-- **GPU:** None used
+- **CPU cores:** 8 | **RAM:** 16 GB | **GPU:** None
 - **Network during ranking:** None (fully offline)
 - **Wall-clock time:** ~25 seconds for 100K candidates
 - **Peak memory:** ~1.2 GB
@@ -275,3 +327,12 @@ All top-10 candidates are ML/AI engineers at product companies with direct exper
 - **Kiro (Claude):** Used for architecture discussion, code review, and planning
 - No candidate data was fed to any LLM
 - All scoring logic is hand-engineered based on JD analysis
+- The system is fully deterministic feature engineering
+
+---
+
+## Team
+
+**LeConHinton**
+GitHub: https://github.com/neevmodh/redrob-candidate-ranker
+Demo: https://redrobai-candidate-ranker.streamlit.app/

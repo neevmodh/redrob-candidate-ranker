@@ -1,28 +1,29 @@
 # Redrob Hackathon — Submission Metadata
+# Team: LeConHinton
 
 # ============================================================================
 # Team identity
 # ============================================================================
-team_name: "your-team-name-here"
+team_name: "LeConHinton"
 
 primary_contact:
-  name: "Your Full Name"
-  email: "your@email.com"
-  phone: "+91-XXXXXXXXXX"
+  name: "Neev Modh"
+  email: "neevmodh@gmail.com"
+  phone: "+91-XXXXXXXXXX"   # fill in your phone number
 
 team_members:
-  - name: "Your Full Name"
-    email: "your@email.com"
+  - name: "Neev Modh"
+    email: "neevmodh@gmail.com"
     role: "ML Engineer / Team Lead"
 
 # ============================================================================
 # Code and reproducibility
 # ============================================================================
-github_repo: "https://github.com/YOUR_USERNAME/redrob-candidate-ranker"
+github_repo: "https://github.com/neevmodh/redrob-candidate-ranker"
 
-sandbox_link: "https://huggingface.co/spaces/YOUR_USERNAME/redrob-ranker"
+sandbox_link: "https://redrobai-candidate-ranker.streamlit.app/"
 
-reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
+reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./leconhinton.csv"
 
 # ============================================================================
 # Compute environment
@@ -59,18 +60,18 @@ methodology_summary: |
   Five scoring components: skill match (35%), career trajectory (30%), experience
   (20%), education (5%), and a behavioral availability multiplier (applied post-score).
 
-  Skill scoring uses a trust multiplier — endorsements × duration × proficiency —
-  so "expert FAISS with 0 months used" scores near zero, catching keyword stuffers.
+  Skill scoring uses a trust multiplier (endorsements x duration x proficiency) so
+  "expert FAISS with 0 months used" scores near zero, catching keyword stuffers.
   Career trajectory applies a services-company penalty (TCS/Infosys/Wipro/Accenture
-  careers score 0.25× multiplier) and requires JD-relevant keywords in role
+  careers score 0.25x multiplier) and requires JD-relevant keywords in role
   descriptions, not just in the skills list. Behavioral signals (open_to_work,
   last_active_date, recruiter_response_rate, notice_period) are combined into a
   multiplier in [0.50, 1.20] applied to the base score.
 
-  Honeypot detection flags candidates with 2+ impossible-profile signals (expert
-  skills with 0 months used, inflated tenure ratios). 13 detected; all forced below
-  rank 100. Runtime: ~25 seconds on CPU for 100K candidates. No GPU, no network,
-  no model downloads.
+  Honeypot detection flags candidates with impossible-profile signals: expert skills
+  with 0 months used, impossible tenure at young companies (Sarvam AI/Krutrim),
+  inflated career tenure ratios. 72 detected, 0 in top-100. Runtime: ~25 seconds
+  on CPU for 100K candidates. No GPU, no network, no model downloads.
 
 # ============================================================================
 # Declarations
