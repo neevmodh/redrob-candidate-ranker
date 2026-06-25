@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+candidates.jsonl
+*.docx
+submission_new.csv
+submission_v2.csv
+submission_final.csv
+submission_final_v2.csv
+submission_metadata_template.yaml
+sample_submission.csv
