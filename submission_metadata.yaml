@@ -8,8 +8,8 @@ team_name: "LeConHinton"
 
 primary_contact:
   name: "Neev Modh"
-  email: "neevmodh@gmail.com"
-  phone: "+91-XXXXXXXXXX"   # fill in your phone number
+  email: "neevmodh205@gmail.com"
+  phone: "+91-7016111267"   # fill in your phone number
 
 team_members:
   - name: "Neev Modh"
@@ -29,7 +29,7 @@ reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./lecon
 # Compute environment
 # ============================================================================
 compute:
-  platform: "MacBook Pro (Apple Silicon M-series)"
+  platform: "MacBook AIR 4 (Apple Silicon M-series)"
   cpu_cores: 8
   ram_gb: 16
   python_version: "3.14.3"
