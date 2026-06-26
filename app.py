@@ -105,16 +105,23 @@ with st.sidebar:
     # ── OPTION 2: Local file path (any size) ──────────────────────────────
     st.markdown("**📁 Option 2 — Local file path** *(any size, recommended for 100K)*")
 
-    # Default path helper
-    _default_path = "/Users/lalu/Downloads/[PUB] India_runs_data_and_ai_challenge/India_runs_data_and_ai_challenge/candidates.jsonl"
+    # Auto-detect candidates.jsonl in repo root (works on Streamlit Cloud after Git LFS)
+    _default_path = ""
+    import pathlib as _pl
+    _repo_file = _pl.Path(__file__).parent / "candidates.jsonl"
+    if _repo_file.exists():
+        _default_path = str(_repo_file)
 
     local_path = st.text_input(
         "File path",
-        value="",
+        value=_default_path,
         placeholder="/full/path/to/candidates.jsonl",
         label_visibility="collapsed",
-        help="Paste the FULL absolute path. On Mac: drag the file into Terminal to get its path.",
+        help="Auto-filled if candidates.jsonl is in the repo. "
+             "On Mac: drag file onto Terminal to get its path.",
     )
+    if _default_path and not local_path.strip():
+        st.sidebar.info("candidates.jsonl detected in repo — ready to run!")
     st.caption("💡 Mac tip: drag file onto Terminal → copies full path with special chars")
 
     # Show file info if path exists
@@ -301,15 +308,16 @@ if run_btn and can_run:
         time.sleep(0.5)
 
     # ── Load from local file with live line-by-line progress ────────────
-    if is_local_mode and not candidates:
-        resolved = os.path.expanduser(local_path.strip())
-        file_size = os.path.getsize(resolved)
+    if using_local and not candidates:
+        import pathlib
+        file_size  = pathlib.Path(resolved_path).stat().st_size
+        file_mb    = file_size / (1024 * 1024)
         bytes_read = 0
         local_candidates = []
-        load_bar  = st.progress(0)
-        load_stat = st.empty()
 
-        with open(resolved, "r", encoding="utf-8") as fh:
+        stat.markdown(f"**📥 Reading** `{pathlib.Path(resolved_path).name}` ({file_mb:.0f} MB)…")
+
+        with open(resolved_path, "r", encoding="utf-8") as fh:
             for lineno, line in enumerate(fh, 1):
                 bytes_read += len(line.encode("utf-8"))
                 line = line.strip()
@@ -319,30 +327,26 @@ if run_btn and can_run:
                     except json.JSONDecodeError:
                         pass
 
-                # Update progress every 5,000 lines
                 if lineno % 5_000 == 0:
-                    pct = min(99, int(bytes_read / file_size * 100))
-                    load_bar.progress(
-                        pct,
-                        text=f"📥 Loading… {pct}%  "
-                             f"({lineno:,} lines · "
-                             f"{bytes_read/(1024*1024):.1f} MB / "
-                             f"{file_size/(1024*1024):.1f} MB)"
-                    )
-                    load_stat.markdown(
-                        f"**Loading candidates:** {lineno:,} read so far "
-                        f"({pct}% of {file_size/(1024*1024):.0f} MB)"
+                    pct     = int(bytes_read / file_size * 100)
+                    mb_done = bytes_read / (1024 * 1024)
+                    bar.progress(
+                        min(pct, 99),
+                        text=(f"📥  Loading candidates…  {pct}%  ·  "
+                              f"{lineno:,} lines  ·  "
+                              f"{mb_done:.1f} / {file_mb:.0f} MB"),
                     )
 
-        load_bar.progress(100, text="✅ File loaded!")
+        bar.progress(100, text="✅ File loaded!")
         time.sleep(0.3)
-        load_bar.empty()
-        load_stat.empty()
         candidates = local_candidates
-        st.success(f"✅ Loaded **{len(candidates):,}** candidates "
-                   f"from `{os.path.basename(resolved)}` "
-                   f"({file_size/(1024*1024):.1f} MB) "
-                   f"in {time.perf_counter()-t0:.1f}s")
+        load_time  = time.perf_counter() - t0
+        stat.success(
+            f"✅ **Loaded {len(candidates):,} candidates** from "
+            f"`{pathlib.Path(resolved_path).name}` "
+            f"({file_mb:.0f} MB) in **{load_time:.1f}s**"
+        )
+        time.sleep(0.5)
 
     # ── Pipeline stages ──────────────────────────────────────────────────
     bar.progress(0)

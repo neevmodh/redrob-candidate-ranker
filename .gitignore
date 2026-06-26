@@ -4,7 +4,6 @@ __pycache__/
 *.pyo
 *.pyd
 .DS_Store
-candidates.jsonl
 *.docx
 submission_new.csv
 submission_v2.csv
