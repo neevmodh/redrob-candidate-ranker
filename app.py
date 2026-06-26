@@ -104,23 +104,33 @@ with st.sidebar:
 
     # ── OPTION 2: Local file path (any size) ──────────────────────────────
     st.markdown("**📁 Option 2 — Local file path** *(any size, recommended for 100K)*")
+
+    # Default path helper
+    _default_path = "/Users/lalu/Downloads/[PUB] India_runs_data_and_ai_challenge/India_runs_data_and_ai_challenge/candidates.jsonl"
+
     local_path = st.text_input(
         "File path",
         value="",
-        placeholder="/path/to/candidates.jsonl",
+        placeholder="/full/path/to/candidates.jsonl",
         label_visibility="collapsed",
-        help="Paste the full path to candidates.jsonl from your machine. "
-             "Tip: drag the file into Terminal to get its path.",
+        help="Paste the FULL absolute path. On Mac: drag the file into Terminal to get its path.",
     )
+    st.caption("💡 Mac tip: drag file onto Terminal → copies full path with special chars")
 
     # Show file info if path exists
     if local_path.strip():
-        resolved = os.path.expanduser(local_path.strip())
-        if os.path.exists(resolved):
-            sz = os.path.getsize(resolved) / (1024 * 1024)
-            st.success(f"✅ Found · {sz:.0f} MB")
-        else:
-            st.error("❌ File not found")
+        # Use pathlib for robust handling of special chars like [ ] in path
+        import pathlib
+        try:
+            resolved = pathlib.Path(local_path.strip()).expanduser().resolve()
+            if resolved.exists() and resolved.is_file():
+                sz = resolved.stat().st_size / (1024 * 1024)
+                st.success(f"✅ Found · {sz:.0f} MB · `{resolved.name}`")
+            else:
+                st.error(f"❌ File not found at: `{local_path.strip()}`")
+                st.caption("💡 Try copying the path from Finder: right-click file → Copy as Pathname")
+        except Exception as e:
+            st.error(f"❌ Path error: {e}")
 
     st.divider()
     top_n = st.slider("Top-N to rank", 5, 100, 50, 5)
@@ -183,11 +193,16 @@ using_local = False
 resolved_path = ""
 
 if local_path.strip():
-    resolved_path = os.path.expanduser(local_path.strip())
-    if os.path.exists(resolved_path):
-        using_local = True
-    else:
-        load_error = f"File not found: {resolved_path}"
+    import pathlib
+    try:
+        _p = pathlib.Path(local_path.strip()).expanduser().resolve()
+        if _p.exists() and _p.is_file():
+            resolved_path = str(_p)
+            using_local = True
+        else:
+            load_error = f"File not found: {local_path.strip()}"
+    except Exception as e:
+        load_error = f"Path error: {e}"
 
 # ── UPLOAD MODE ────────────────────────────────────────────────────────────
 if uploaded and not using_local:
