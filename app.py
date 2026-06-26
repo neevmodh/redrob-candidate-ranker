@@ -2,7 +2,7 @@
 app.py  -  Redrob AI Candidate Ranker  |  LeConHinton  |  Hackathon 2025
 Advanced Streamlit dashboard with full scoring visibility.
 """
-import io, json, csv, time
+import io, json, csv, time, os
 import streamlit as st
 
 st.set_page_config(
@@ -91,8 +91,38 @@ with st.sidebar:
     st.markdown("### 🎯 Redrob AI Ranker")
     st.markdown("*LeConHinton · Hackathon 2025*")
     st.divider()
-    uploaded = st.file_uploader("📂 Upload Candidates (.json / .jsonl)",
-                                 type=["json", "jsonl"])
+
+    # ── OPTION 1: Upload small file ────────────────────────────────────────
+    st.markdown("**📂 Option 1 — Upload file** *(≤50 candidates, cloud demo)*")
+    uploaded = st.file_uploader(
+        "Drop .json or .jsonl here",
+        type=["json", "jsonl"],
+        label_visibility="collapsed",
+    )
+
+    st.markdown("*— OR —*")
+
+    # ── OPTION 2: Local file path (any size) ──────────────────────────────
+    st.markdown("**📁 Option 2 — Local file path** *(any size, recommended for 100K)*")
+    local_path = st.text_input(
+        "File path",
+        value="",
+        placeholder="/path/to/candidates.jsonl",
+        label_visibility="collapsed",
+        help="Paste the full path to candidates.jsonl from your machine. "
+             "Tip: drag the file into Terminal to get its path.",
+    )
+
+    # Show file info if path exists
+    if local_path.strip():
+        resolved = os.path.expanduser(local_path.strip())
+        if os.path.exists(resolved):
+            sz = os.path.getsize(resolved) / (1024 * 1024)
+            st.success(f"✅ Found · {sz:.0f} MB")
+        else:
+            st.error("❌ File not found")
+
+    st.divider()
     top_n = st.slider("Top-N to rank", 5, 100, 50, 5)
     st.divider()
     st.markdown("**View**")
@@ -147,7 +177,20 @@ with st.expander("📋 Job Description — what we're ranking against"):
 
 # ── Load candidates ────────────────────────────────────────────────────────
 candidates, load_error = [], None
-if uploaded:
+
+# Priority: local path > upload (local path handles any size)
+using_local = False
+resolved_path = ""
+
+if local_path.strip():
+    resolved_path = os.path.expanduser(local_path.strip())
+    if os.path.exists(resolved_path):
+        using_local = True
+    else:
+        load_error = f"File not found: {resolved_path}"
+
+# ── UPLOAD MODE ────────────────────────────────────────────────────────────
+if uploaded and not using_local:
     try:
         raw = uploaded.read().decode("utf-8")
         if uploaded.name.endswith(".jsonl"):
@@ -157,42 +200,200 @@ if uploaded:
             candidates = d if isinstance(d, list) else [d]
         if len(candidates) > 100:
             candidates = candidates[:100]
-            st.sidebar.warning("Truncated to 100 for sandbox")
-        st.sidebar.success(f"✅ {len(candidates)} candidates ready")
+            st.sidebar.warning("Truncated to 100 for cloud sandbox")
+        st.sidebar.success(f"✅ {len(candidates)} candidates loaded")
     except Exception as e:
         load_error = str(e)
         st.sidebar.error(f"❌ {e}")
 
-if not uploaded:
-    st.info("👈 Upload **sample_candidates.json** from the sidebar to test the ranker.")
+# ── LOCAL PATH MODE: show file info, load happens at run time ──────────────
+if using_local:
+    file_size_mb = os.path.getsize(resolved_path) / (1024 * 1024)
+    st.info(
+        f"📁 **Local file ready:** `{os.path.basename(resolved_path)}`  "
+        f"— **{file_size_mb:.1f} MB**  "
+        f"— will load with live progress when you click Run"
+    )
+
+if not uploaded and not using_local:
+    st.info(
+        "👈 **Get started:** upload **sample_candidates.json** for a quick demo  "
+        "— or paste the path to **candidates.jsonl** (487 MB) for the full 100K run."
+    )
 
 # ── Session state ─────────────────────────────────────────────────────────
 for key in ("results", "hp_ids", "jd", "elapsed", "n_total"):
     if key not in st.session_state:
         st.session_state[key] = None
 
-# ── Run button + pipeline ─────────────────────────────────────────────────
-run_btn = st.button("🚀  Run Ranker", type="primary",
-                    disabled=(not candidates or bool(load_error)),
-                    use_container_width=True)
+# ── Run button ─────────────────────────────────────────────────────────────
+can_run = bool(candidates) or using_local
+run_btn = st.button(
+    "🚀  Run Ranker",
+    type="primary",
+    disabled=(not can_run or bool(load_error)),
+    use_container_width=True,
+)
 
-if run_btn and candidates:
+if run_btn and can_run:
     get_jd, detect_hp, rank_cands, gen_reason = load_pipeline()
-    bar, stat = st.progress(0), st.empty()
-    t0 = time.perf_counter()
-    stat.info("**[1/4]** Parsing job description…"); bar.progress(8)
+    bar  = st.progress(0)
+    stat = st.empty()
+    t0   = time.perf_counter()
+
+    # ── Load from local file with live line-by-line progress ────────────
+    if using_local and not candidates:
+        file_size  = os.path.getsize(resolved_path)
+        file_mb    = file_size / (1024 * 1024)
+        bytes_read = 0
+        local_candidates = []
+
+        stat.markdown(f"**📥 Reading** `{os.path.basename(resolved_path)}` "
+                      f"({file_mb:.0f} MB)…")
+
+        with open(resolved_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                bytes_read += len(line.encode("utf-8"))
+                line = line.strip()
+                if line:
+                    try:
+                        local_candidates.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+
+                # Update bar every 5,000 lines
+                if lineno % 5_000 == 0:
+                    pct      = int(bytes_read / file_size * 100)
+                    mb_done  = bytes_read / (1024 * 1024)
+                    bar.progress(
+                        min(pct, 99),
+                        text=(
+                            f"📥  Loading candidates…  "
+                            f"{pct}%  ·  {lineno:,} lines  ·  "
+                            f"{mb_done:.1f} / {file_mb:.0f} MB"
+                        ),
+                    )
+
+        bar.progress(100, text="✅ File loaded!")
+        time.sleep(0.3)
+        candidates = local_candidates
+        load_time  = time.perf_counter() - t0
+        stat.success(
+            f"✅ **Loaded {len(candidates):,} candidates** from "
+            f"`{os.path.basename(resolved_path)}` "
+            f"({file_mb:.0f} MB) in **{load_time:.1f}s**"
+        )
+        time.sleep(0.5)
+
+    # ── Load from local file with live line-by-line progress ────────────
+    if is_local_mode and not candidates:
+        resolved = os.path.expanduser(local_path.strip())
+        file_size = os.path.getsize(resolved)
+        bytes_read = 0
+        local_candidates = []
+        load_bar  = st.progress(0)
+        load_stat = st.empty()
+
+        with open(resolved, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                bytes_read += len(line.encode("utf-8"))
+                line = line.strip()
+                if line:
+                    try:
+                        local_candidates.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+
+                # Update progress every 5,000 lines
+                if lineno % 5_000 == 0:
+                    pct = min(99, int(bytes_read / file_size * 100))
+                    load_bar.progress(
+                        pct,
+                        text=f"📥 Loading… {pct}%  "
+                             f"({lineno:,} lines · "
+                             f"{bytes_read/(1024*1024):.1f} MB / "
+                             f"{file_size/(1024*1024):.1f} MB)"
+                    )
+                    load_stat.markdown(
+                        f"**Loading candidates:** {lineno:,} read so far "
+                        f"({pct}% of {file_size/(1024*1024):.0f} MB)"
+                    )
+
+        load_bar.progress(100, text="✅ File loaded!")
+        time.sleep(0.3)
+        load_bar.empty()
+        load_stat.empty()
+        candidates = local_candidates
+        st.success(f"✅ Loaded **{len(candidates):,}** candidates "
+                   f"from `{os.path.basename(resolved)}` "
+                   f"({file_size/(1024*1024):.1f} MB) "
+                   f"in {time.perf_counter()-t0:.1f}s")
+
+    # ── Pipeline stages ──────────────────────────────────────────────────
+    bar.progress(0)
+    stat.info("**[1/4]** Parsing job description…"); bar.progress(5)
     jd = get_jd()
-    stat.info("**[2/4]** Detecting honeypot candidates…"); bar.progress(28)
+
+    stat.info("**[2/4]** Detecting honeypot candidates…"); bar.progress(15)
     hp_ids = detect_hp(candidates)
-    stat.info(f"**[3/4]** Scoring {len(candidates)} candidates…"); bar.progress(55)
-    ranked = rank_cands(candidates, jd, hp_ids, top_n=min(top_n, len(candidates)))
-    stat.info("**[4/4]** Generating reasoning strings…"); bar.progress(85)
+    stat.info(f"  → {len(hp_ids)} honeypots flagged")
+
+    # Scoring with per-batch progress
+    stat.info(f"**[3/4]** Scoring {len(candidates):,} candidates…")
+    bar.progress(20)
+
+    # Patch ranker to emit progress back to Streamlit
+    scored_so_far = [0]
+    total = len(candidates)
+    orig_rank = rank_cands
+
+    def _rank_with_progress(cands, jd_, hp_, top_n_):
+        # Score in batches, updating the bar
+        from scorer.ranker import _score_single
+        from scorer.jd_parser import JobDescription
+        results_ = []
+        batch = 2_000
+        for i in range(0, len(cands), batch):
+            chunk = cands[i:i+batch]
+            for c in chunk:
+                results_.append(_score_single(c, jd_, hp_))
+            done = min(i + batch, len(cands))
+            pct = 20 + int(done / len(cands) * 55)
+            bar.progress(pct,
+                         text=f"Scoring… {done:,} / {len(cands):,} "
+                              f"({done/len(cands)*100:.0f}%)")
+        results_.sort(key=lambda x: (-x["final_score"], x["candidate_id"]))
+        top_ = results_[:top_n_]
+        for idx_, item_ in enumerate(top_, 1):
+            item_["rank"] = idx_
+        prev_ = 1.0
+        for item_ in top_:
+            if item_["final_score"] > prev_:
+                item_["final_score"] = prev_
+            prev_ = item_["final_score"]
+        return top_
+
+    try:
+        ranked = _rank_with_progress(candidates, jd, hp_ids,
+                                     top_n=min(top_n, len(candidates)))
+    except Exception:
+        # Fallback to original ranker if patch fails
+        bar.progress(75)
+        ranked = orig_rank(candidates, jd, hp_ids,
+                           top_n=min(top_n, len(candidates)))
+
+    stat.info("**[4/4]** Generating reasoning strings…"); bar.progress(90)
     final = gen_reason(ranked, jd)
+
     elapsed = time.perf_counter() - t0
     bar.progress(100); time.sleep(0.15); bar.empty(); stat.empty()
+
     st.session_state.update(results=final, hp_ids=hp_ids, jd=jd,
                              elapsed=elapsed, n_total=len(candidates))
-    st.success(f"✅ Done in **{elapsed:.2f}s** — {len(final)} candidates ranked")
+    st.success(f"✅ Done in **{elapsed:.2f}s** — "
+               f"{len(candidates):,} candidates scored · "
+               f"{len(final)} ranked · "
+               f"{len(hp_ids)} honeypots excluded")
 
 # ══════════════════════════════════════════════════════════════════════════
 # RESULTS SECTION
@@ -256,55 +457,36 @@ if st.session_state.results:
         for item in final:
             p   = item["_raw"]["profile"]
             sig = item["_raw"]["redrob_signals"]
-            sk  = item.get("skill",{})
-            ca  = item.get("career",{})
-            ex  = item.get("experience",{})
-            be  = item.get("behavioral",{})
+            sk  = item.get("skill", {})
+            ca  = item.get("career", {})
+            ex  = item.get("experience", {})
+            be  = item.get("behavioral", {})
             row = {
-                "Rank":       item["rank"],
-                "Score":      round(item["final_score"],4),
-                "Title":      p.get("current_title",""),
-                "Company":    p.get("current_company",""),
-                "YoE":        p.get("years_of_experience",0),
-                "Location":   p.get("location",""),
-                "OtW":        "✅" if sig.get("open_to_work_flag") else "❌",
-                "RespRate":   f"{sig.get('recruiter_response_rate',0):.0%}",
-                "Notice":     f"{sig.get('notice_period_days',0)}d",
-                "HP":         "⚠️" if item["candidate_id"] in hp_ids else "✅",
-                "Reasoning":  item["reasoning"],
+                "Rank":         item["rank"],
+                "Candidate ID": item["candidate_id"],
+                "Score":        round(item["final_score"], 4),
+                "Title":        p.get("current_title", ""),
+                "Company":      p.get("current_company", ""),
+                "YoE":          p.get("years_of_experience", 0),
+                "Location":     p.get("location", ""),
+                "Country":      p.get("country", ""),
+                "OtW":          "Yes" if sig.get("open_to_work_flag") else "No",
+                "Resp Rate":    f"{sig.get('recruiter_response_rate', 0):.0%}",
+                "Notice":       f"{sig.get('notice_period_days', 0)}d",
+                "Honeypot":     "Yes" if item["candidate_id"] in hp_ids else "No",
+                "Reasoning":    item["reasoning"],
             }
             if show_breakdown:
-                row["Skill"]   = round(sk.get("score",0),3)
-                row["Career"]  = round(ca.get("score",0),3)
-                row["Exp"]     = round(ex.get("score",0),3)
-                row["BehX"]    = round(be.get("multiplier",1),3)
+                row["Skill"]   = round(sk.get("score", 0), 3)
+                row["Career"]  = round(ca.get("score", 0), 3)
+                row["Exp"]     = round(ex.get("score", 0), 3)
+                row["BehMult"] = round(be.get("multiplier", 1), 3)
                 row["Must"]    = f"{sk.get('must_coverage',0)}/{sk.get('must_total',8)}"
             rows.append(row)
 
         df = pd.DataFrame(rows)
-
-        def _row_color(row):
-            if row["HP"] == "⚠️":
-                return ["background-color:#fff0f0"]*len(row)
-            r = row["Rank"]
-            if r<=3:   return ["background-color:#fffde7"]*len(row)
-            if r<=10:  return ["background-color:#f0fff4"]*len(row)
-            if r<=25:  return ["background-color:#f0f4ff"]*len(row)
-            return [""]*len(row)
-
-        def _score_color(v):
-            if not isinstance(v,float): return ""
-            if v>=0.75: return "color:#27ae60;font-weight:800"
-            if v>=0.60: return "color:#e67e22;font-weight:700"
-            if v<=0.35: return "color:#e74c3c"
-            return ""
-
-        styled = df.style.apply(_row_color, axis=1)
-        score_cols = ["Score"]
-        if show_breakdown:
-            score_cols += ["Skill","Career","Exp","BehX"]
-        styled = styled.map(_score_color, subset=score_cols)
-        st.dataframe(styled, use_container_width=True, height=600)
+        # No colours — plain clean table
+        st.dataframe(df, use_container_width=True, height=600)
 
     # ── VIEW: Profile Inspector ──────────────────────────────────────────
     elif view_mode == "🔍 Profile Inspector":
